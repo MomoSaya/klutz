@@ -1,0 +1,401 @@
+<template>
+  <section class="sku-container full-width">
+    <transition
+      name="custom-classes-transition"
+      enter-active-class="fade-in-active"
+      leave-active-class="fade-out-active">
+      <div v-show="show">
+        <div class="bg full-width" @click="closeSheet()">
+        </div>
+      </div>
+    </transition>
+    <transition name="slide-in">
+      <div v-show="show" class="sheet white-bg">
+        <div class="close-btn-wrapper">
+          <div class="close-btn" @click="closeSheet()">
+            <i class="iconfont icon-guanbi"></i>
+          </div>
+        </div>
+        <div class="info-wrapper">
+          <img
+            v-if="img && img.length > 0 && img[0].thumb_urls && img[0].thumb_urls.length > 0"
+            class="img"
+            :src="img[0].thumb_urls[0]">
+          <div class="img" v-else></div>
+          <div class="name">
+            <p class="font-16 primary-text">{{store.name}}</p>
+            <div class="price-info">
+              <div class="price">
+                <span class="font-12">&yen;</span>
+                <span class="font-18">{{handleDiscountPrice()}}</span>
+              </div>
+              <div class="number third-text font-12">
+                库存:{{price.amount}}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sheet-content">
+          <div class="price-wrapper">
+            <p class="font-16 second-text">价格:</p>
+            <tag
+              :tags="discountTags"
+              :price="price"
+              :active="choosed"
+              @tag-click="tagClick">
+            </tag>
+          </div>
+          <div v-if="priceProperties && priceProperties.length > 0" class="price-properties">
+            <p class="title">规格参数</p>
+            <p
+              v-for="(item, index) in priceProperties"
+              :key="index"
+              class="item">
+              {{item.key}} : {{item.value}}
+            </p>
+          </div>
+          <div
+            v-if="price.amount !== '定制' && price.money !== '赠品'"
+            class="number-wrapper">
+            <p class="font-16 second-text">数量</p>
+            <div class="count-bar">
+              <i
+                v-if="quantity > 1"
+                class="iconfont icon-jianshao"
+                @click.stop="decrease()"></i>
+              <i
+                v-if="quantity === 1"
+                class="iconfont icon-jianshao disabled"
+                @click.stop="doNothing"></i>
+              <div
+                class="count"
+                @click.stop="doNothing">
+                <input
+                  v-if="parseInt(quantity + '') < parseInt(price.amount + '')"
+                  type="number"
+                  @blur="handleInput($event.target.value, price.amount)"
+                  :value="quantity">
+                <span
+                  v-if="parseInt(quantity + '') === parseInt(price.amount + '')">
+                  {{quantity}}
+                </span>
+              </div>
+              <i
+                v-if="parseInt(quantity + '') < parseInt(price.amount + '')"
+                class="iconfont icon-tianjia"
+                @click.stop="increase()"></i>
+              <i
+                v-if="parseInt(quantity + '') === parseInt(price.amount + '')"
+                class="iconfont icon-tianjia disabled"
+                @click.stop="doNothing">
+              </i>
+            </div>
+          </div>
+        </div>
+        <div class="btn-wrapper">
+          <a v-if="disabled" class="shopping-car disabled">加入购物车</a>
+          <a v-else class="shopping-car "  @click="addShoppingCar(quantity)">加入购物车</a>
+          <a v-if="disabled" class="buy disabled">立即购买</a>
+          <a v-else class="buy" @click="buy(quantity)">立即购买</a>
+        </div>
+      </div>
+    </transition>
+  </section>
+</template>
+
+<script>
+  import Tag from './Tag'
+  export default {
+    props: ['show', 'store', 'img', 'price', 'choosed', 'quantity', 'disabled', 'priceProperties'],
+    data () {
+      return {
+
+      }
+    },
+    components: {
+      Tag
+    },
+    methods: {
+      closeSheet () {
+        this.$emit('close')
+      },
+      tagClick (item) {
+        this.$emit('change-price', item)
+      },
+      doNothing () {
+        // 空方法
+      },
+      decrease () {
+        this.$emit('decrease')
+      },
+      handleInput (quantity, amount) {
+        this.$emit('handle-quantity', {quantity, amount})
+      },
+      increase () {
+        this.$emit('increase')
+      },
+      addShoppingCar (quantity) {
+        this.$emit('add-shopping-cart', quantity)
+      },
+      buy (quantity) {
+        this.$emit('buy-now', quantity)
+      },
+      handleDiscountPrice () {
+        if (this.store.promotion && this.store.promotion.rate) {
+          return (Math.round(parseFloat(this.price.money) * parseFloat(this.store.promotion.rate) * 100) / 100).toFixed(2)
+        } else {
+          return this.price.money
+        }
+      }
+    },
+    computed: {
+      discountTags () {
+        let tmpArr = []
+        for (let i = 0; i < this.store.prices.length; i++) {
+          if (this.store.prices[i].money !== '定制' && this.store.prices[i].money !== '赠品' && this.store.promotion && this.store.promotion.rate) {
+            let tmpMoney = (Math.round(parseFloat(this.store.prices[i].money) * parseFloat(this.store.promotion.rate) * 100) / 100).toFixed(2)
+            let tmpObj = {...this.store.prices[i], ...{money: tmpMoney}}
+            tmpArr.push(tmpObj)
+          } else {
+            tmpArr.push(this.store.prices[i])
+          }
+        }
+        return tmpArr
+      }
+    }
+  }
+</script>
+
+<style lang="scss" scoped>
+  @import "../../styles/mixin";
+
+  .sku-container {
+    .bg {
+      position: fixed;
+      background-color: rgba(0, 0, 0, .5);
+      top: 0;
+      bottom: 0;
+    }
+    .sheet {
+      position: fixed;
+      margin: 0 auto;
+      bottom: 0;
+      top: 20%;
+      width: 100%;
+      max-width: 540px;
+      .close-btn-wrapper {
+        position: absolute;
+        @include px2rem(top, -100px);
+        width: 100%;
+        max-width: 540px;
+        .close-btn {
+          position: absolute;
+          right: 0;
+          @include px2rem(height, 100px);
+          @include px2rem(width, 100px);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          line-height: normal;
+          i {
+            color: $white;
+            @include font-dpr(30px);
+          }
+        }
+      }
+      .info-wrapper {
+        @include pm2rem(margin, 0px, 30px, 0px, 30px);
+        border-bottom: 1px solid $second-grey;
+        .img {
+          position: absolute;
+          @include px2rem(top, -40px);
+          @include px2rem(left, 40px);
+          @include px2rem(width, 200px);
+          @include px2rem(height, 200px);
+          @include px2rem(border-radius, 8px);
+          box-shadow: 0 0 12px 0 rgba(171, 171, 171, .5);
+        }
+        .name {
+          @include pm2rem(padding, 20px, 0px, 30px, 230px);
+          @include px2rem(height, 140px);
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: flex-start;
+          p {
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            word-break: normal;
+            -webkit-box-orient: vertical;
+            display: -webkit-box;
+          }
+          .price-info {
+            line-height: normal;
+            display: flex;
+            align-items: center;
+            .price {
+              color: #FF5001;
+              @include px2rem(margin-right, 40px);
+            }
+          }
+        }
+      }
+      .sheet-content {
+        position: absolute;
+        @include px2rem(top, 190px);
+        @include px2rem(bottom, 97px);
+        left: 0;
+        right: 0;
+        max-width: 540px;
+        overflow: auto;
+        .price-wrapper {
+          @include pm2rem(margin, 0px, 30px, 0px, 30px);
+          @include pm2rem(padding, 30px, 10px, 10px, 10px);
+          border-bottom: 1px solid $second-grey;
+          p {
+            @include px2rem(margin-bottom, 30px);
+          }
+        }
+        .price-properties {
+          @include pm2rem(margin, 0px, 30px, 0px, 30px);
+          @include pm2rem(padding, 30px, 0px, 30px, 0px);
+          box-sizing: border-box;
+          border-bottom: 1px solid $second-grey;
+          .title {
+            @include px2rem(font-size, 30px);
+            @include px2rem(margin-bottom, 30px);
+            color: $primary-dark;
+          }
+          .item {
+            @include px2rem(font-size, 28px);
+            @include pm2rem(margin, 0px, 0px, 20px, 30px);
+            color: $second-dark;
+          }
+        }
+        .number-wrapper {
+          @include pm2rem(margin, 0px, 30px, 0px, 30px);
+          @include pm2rem(padding, 30px, 10px, 30px, 10px);
+          border-bottom: 1px solid $second-grey;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          .count-bar {
+            display: flex;
+            align-items: center;
+            .count {
+              display: block;
+              @include px2rem(width, 120px);
+              @include font-dpr(14px);
+              color: $second-dark;
+              line-height: normal;
+              text-align: center;
+              @include pm2rem(margin, 0px, 6px, 0px, 6px);
+              input {
+                width: inherit;
+                border: none;
+                text-align: center;
+              }
+            }
+            i {
+              color: $second-dark;
+              @include font-dpr(21px);
+              line-height: normal;
+            }
+            .disabled {
+              color: #DADADA;
+            }
+          }
+        }
+      }
+      .btn-wrapper {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        max-width: 540px;
+        display: flex;
+        a {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex: 1;
+          line-height: normal;
+          color: $white;
+          @include font-dpr(18px);
+          @include px2rem(height, 97px);
+        }
+        & :first-child {
+          background-color: $green;
+        }
+        & :last-child {
+          background-color: #1db689;
+        }
+        & a:active {
+          opacity: .8;
+        }
+        .disabled {
+          background-color: $eighth-grey;
+        }
+        .disabled:active {
+          opacity: 1;
+        }
+      }
+    }
+  }
+
+  .slide-in-enter-active, {
+    animation: fadeInUp ease-out .3s 0s 1 both;
+	}
+
+	.slide-in-leave-active {
+    animation: fadeOutDown ease-out .2s 0s 1 both;
+	}
+
+  .fade-in-active {
+    animation: fadeIn 0.2s 0s 1 both;
+  }
+
+  .fade-out-active {
+    animation: fadeOut 0.2s 0s 1 both;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      transform: translate3d(0, 110%, 0);
+    }
+
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes fadeOutDown {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+
+    to {
+      transform: translate3d(0, 110%, 0);
+    }
+  }
+</style>

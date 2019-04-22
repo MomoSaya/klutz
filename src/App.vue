@@ -1,0 +1,537 @@
+<template>
+  <div id="app">
+    <transition name="router-fade" mode="out-in">
+      <keep-alive :exclude="noKeepAliveComponents">
+        <router-view :key="$route.path"></router-view>
+      </keep-alive>
+    </transition>
+    <integral-dialog
+      :show="registModal"
+      @login="goLogin"
+      @regist="goRegist"
+      @close="closeIntergralDialog">
+    </integral-dialog>
+    <regist-dialog
+      :show="registSuccessModal"
+      :num="num"
+      :money="money"
+      @help="help"
+      @view-integral="viewIntegral"
+      @close="closeRegistDialog">
+    </regist-dialog>
+    <regist-guid-dialog
+      :show="registGuidSuccess"
+      :num="num"
+      :money="money"
+      :detail="registGuidSuccessDetail"
+      @close="closeRegistGuidDialog"
+      @download="goDownload('regist')">
+    </regist-guid-dialog>
+    <make-card
+      :show="makeCardModal"
+      @click="goDownload('makeCard')"
+      @close="closeMakeCardDialog()">
+    </make-card>
+    <regist-bar
+      :show="showRegistBar && !hasCloseRegistBar"
+      :detail="sharerInfo"
+      @close="closeRegistBar()"
+      @regist="goRegist">
+    </regist-bar>
+    <download-bar
+      :show="showDownloadBar"
+      @close="closeDownloadBar()"
+      @download="makeCard()">
+    </download-bar>
+    <float-message
+      :messages="messages"
+      @close="removeMessage"
+      @click="handleRegistGuidDialog">
+    </float-message>
+  </div>
+</template>
+
+<script>
+  import { getStore, setStore, removeAllStore, removeStore, mobileClient } from './config/mUtils'
+  import IntegralDialog from './components/common/IntegralDialog'
+  import RegistDialog from './components/common/RegistDialog'
+  import MakeCard from './components/common/MakeCard'
+  import DownloadBar from './components/footer/DownloadBar'
+  import FloatMessage from './components/header/FloatMessage'
+  import RegistBar from './components/header/RegistBar'
+  import RegistGuidDialog from './components/common/RegistGuidDialog'
+  import { mapGetters } from 'vuex'
+  import { requestFn } from './config/request'
+  import { MessageBox } from 'mint-ui'
+  import moment from 'moment'
+  export default {
+    name: 'App',
+    data () {
+      return {
+        currentUserDelegate: this.$store.state.userDelegate || null,
+        currentDeviceDelegate: this.$store.state.deviceDelegate || null,
+        conversation: null,
+        acitve: false,
+        showLogoffPopup: false,
+        noKeepAliveComponents: [
+          'See',
+          'Chat',
+          'Report',
+          'Login',
+          'Register',
+          'ChangePassword',
+          'ForgetPassword',
+          'SetNewPassword',
+          'RegisterNext',
+          'BeforeRegister',
+          'Maps',
+          'OrderDetail',
+          'HelpDetail',
+          'AddAddress',
+          'OrderPaying',
+          'Trace',
+          'Address',
+          'Pay',
+          'ProductDetail',
+          'ShoppingCart',
+          'InformationFolders',
+          'MallDetail',
+          'JoinIn',
+          'PaySuccess',
+          'PayError',
+          'Protocol',
+          'PayTips',
+          'FeedBack',
+          'Mine',
+          'QrPage',
+          'Information',
+          'Timeline',
+          'Comments',
+          'Spaces'
+        ],
+        num: getStore('shortUuid') ? 600 : 1000,
+        money: getStore('shortUuid') ? 6 : 10,
+        messages: []
+      }
+    },
+    components: {
+      IntegralDialog,
+      RegistDialog,
+      MakeCard,
+      RegistBar,
+      RegistGuidDialog,
+      DownloadBar,
+      FloatMessage
+    },
+    methods: {
+      beforeInit () {
+        // 登录后getStore('user')会发生变化，不能直接从data中取数据，data中的数据不是响应式的。
+        if (getStore('user') && getStore('user').authentication_token && !this.$store.state.leanCloudActive) {
+          this.getClosedConversationList()
+          this.init()
+        } else {
+          return false
+        }
+      },
+      openIMClient (id, signatureStr) {
+        return this.$realtime.createIMClient(id, {
+          signatureFactory: () => {
+            return new Promise((resolve, reject) => {
+              return resolve({
+                signature: getStore(`${signatureStr}`).signature,
+                timestamp: getStore(`${signatureStr}`).timestamp / 1,
+                nonce: getStore(`${signatureStr}`).nonce
+              })
+            })
+          },
+          conversationSignatureFactory: () => {
+            return new Promise((resolve, reject) => {
+              return resolve({
+                signature: getStore(`${signatureStr}`).signature,
+                timestamp: getStore(`${signatureStr}`).timestamp / 1,
+                nonce: getStore(`${signatureStr}`).nonce
+              })
+            })
+          }
+        })
+      },
+      getTeamDetail (id, type) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/links/teams',
+          method: 'get',
+          params: {
+            ids: id
+          },
+          target: this,
+          resolve: (state, res) => {
+            this.$store.dispatch('switchGuidDialog', {status: true})
+            this.$store.dispatch('setOrganizationDialogInfo', {
+              detail: {
+                name: res.data.teams[0].name,
+                logo: res.data.teams[0].logo,
+                type: type
+              }
+            })
+          },
+          reject: () => {
+          }
+        })
+      },
+      handleFloatMessage (arr) {
+        for (let i = 0; i < arr.length; i++) {
+          if ((arr[i].lastMessage._lcattrs.clazz === 'groups_users.new_outer_guide_to_staff' || arr[i].lastMessage._lcattrs.clazz === 'groups_users.new_member_to_staff') && this.messages.length < 1) {
+            // 某某企业已添加您为导购员或某某商城已添加您为会员
+            this.messages.push(arr[i].lastMessage)
+          }
+        }
+      },
+      async init () {
+        if (!this.$store.state.deviceDelegate) {
+          this.currentDeviceDelegate = await this.openIMClient(`dev_${getStore('user').device_id}`, 'device_signature')
+          this.$store.dispatch('setDeviceDelegate', this.currentDeviceDelegate)
+        }
+        if (!this.$store.state.userDelegate) {
+          this.currentUserDelegate = await this.openIMClient(getStore('user').id, 'signature')
+          this.$store.dispatch('setUserDelegate', this.currentUserDelegate)
+        }
+        this.$store.state.userDelegate.getQuery().limit(1000).containsMembers([`${getStore('user').id}`]).find().then(conversations => {
+          this.$store.dispatch('updateLeanCouldConversations', conversations)
+        })
+        this.$store.state.deviceDelegate.on('message', message => {
+          console.log('deviceDelegate, 设备uuid收到的消息，用于强制下线等操作', message)
+          if (message.from === 'system' && message._lcattrs.clazz === 'sign_devices.logoff') {
+            this.showLogoffPopup = true
+            MessageBox.alert('授权到期，主设备将当前设备下线').then(action => {
+              this.showLogoffPopup = false
+              removeAllStore()
+              // 要考虑在云视页面授权到期的情况，在云视页面授权到期下面的路由跳转将不会起作用。
+              if (window.location.pathname === '/see') {
+                window.location.reload()
+              } else {
+                this.$router.replace({name: 'See'})
+              }
+            })
+          }
+        })
+        this.$store.state.userDelegate.on('message', message => {
+          console.log('userDelegate, 用户uuid收到的消息，用于聊天等操作', message)
+          if (message.from !== 'system') {
+            let tmpObj = {
+              conversationId: message.cid,
+              from: message.from,
+              id: message.id,
+              fromLogo: message._lcattrs.fromLogo,
+              fromName: message._lcattrs.fromName,
+              timestamp: moment(message.timestamp).format('YYYY-MM-DD HH:mm:ss'),
+              clazz: message._lcattrs.clazz,
+              lastMessage: message._lctext,
+              isSelf: false,
+              remark: message._lcattrs.fromName,
+              logoUrl: message._lcattrs.fromLogo
+            }
+            this.reOpenBanList(message.from, message._lcattrs.clazz, message.cid)
+            // 不在聊天页面，收到的新消息统一默认为未读消息
+            if (this.$route.name !== 'Chat' && message.from !== getStore('user').id) {
+              this.$store.dispatch('receiveNewMessage', tmpObj)
+            }
+          } if (message.from === 'system' && message._lcattrs.clazz === 'groups_users.new_outer_guide_to_staff' && this.messages.length < 1) {
+            // 某某企业已添加您为导购员
+            this.messages.push(message)
+          } else if (message.from === 'system' && message._lcattrs.clazz === 'groups_users.new_member_to_staff' && this.messages.length < 1) {
+            // 某某商城已添加您为商城会员
+            this.messages.push(message)
+          } else {
+            // 用户uuid收到的消息类型为系统消息，通常是流程里的推送通知，网页端暂未开放，因此将非会话类型的消息过滤掉(用户收到的其他类型的系统消息)
+          }
+        })
+        this.$store.state.userDelegate.on('unreadmessagescountupdate', unreadMessagesCount => {
+          console.log('聊天未读消息记录', unreadMessagesCount)
+          this.handleFloatMessage(unreadMessagesCount)
+          this.$store.dispatch('updateUnReadMsgCount', unreadMessagesCount)
+        })
+        this.$store.dispatch('switchLeanCloudStatus', {active: true})
+      },
+      async getClosedConversationList () {
+        if (this.$store.state.closedConversationList.length === 0) {
+          let {state, res} = await requestFn({
+            url: '/v1/im/conferences',
+            params: {
+              token: getStore('user').authentication_token,
+              closed: true
+            }
+          })
+          if (res.data) {
+            state.closedConversationList = res.data.conferences
+          }
+        }
+      },
+      async reOpenBanList (linkId, clazz, conversationId) {
+        // 若收到的消息id(会话id)在被关闭的会话列表中，则需要开启会话
+        let flag = false
+        let conferencesLinkId = null
+        for (let i = 0; i < this.$store.state.closedConversationList.length; i++) {
+          if (conversationId === this.$store.state.closedConversationList[i].conversation_id) {
+            flag = true
+            conferencesLinkId = this.$store.state.closedConversationList[i].link_id
+            break
+          }
+        }
+        if (flag) {
+          await requestFn({
+            url: '/v1/im/conferences',
+            method: 'post',
+            data: {
+              token: getStore('user').authentication_token,
+              ...(conferencesLinkId ? {product_id: conferencesLinkId} : {}), // 如果是产品客服，需要产品id
+              user_id: linkId
+            }
+          })
+          // 打开被关闭的会话后，要更新被关闭的会话列表
+          this.getClosedConversationList()
+        }
+      },
+      goLogin () {
+        this.clearUserData()
+        this.closeIntergralDialog()
+        setStore(this.$route.name === 'ShoppingCart' ? 'fromShoppingCart' : 'beforeLogin', 'true')
+        this.$router.push({name: 'Login', query: {onlyMobile: this.onlyMobile}})
+      },
+      goRegist () {
+        this.clearUserData()
+        this.closeRegistBar()
+        this.closeIntergralDialog()
+        setStore(this.$route.name === 'ShoppingCart' ? 'fromShoppingCart' : 'shareRegist', 'true')
+        this.$router.push({name: 'BeforeRegister'})
+      },
+      clearUserData () {
+        // 如果是第三方账号登录且没有绑定手机号，点击新用户注册，会注销当前登录的第三方账号。如果是从购物车前往注册页面，则需要保存来自购物车的标记，用户取消注册时，返回会回到云视首页而不是购物车。
+        // 这里不能清除所有的会话缓存，shortUuid(新用户注册时，给分享者加积分)及返回标记（例如Mall_goHome）要保留，不然初始页面无法正常返回。
+        removeStore('user')
+        removeStore('unReadMsgs')
+        removeStore('signature')
+        removeStore('leanCloudConversations')
+        removeStore('device_signature')
+        removeStore('fromName')
+        this.$store.dispatch('switchLeanCloudStatus', {active: false})
+        if (mobileClient() === 'weixin') {
+          setStore('weixinLogin', 'true')
+        }
+        this.$store.dispatch('clearUnReadMsgCount', {})
+      },
+      closeIntergralDialog () {
+        this.$store.dispatch('closeIntegralDialog', {status: true})
+      },
+      closeRegistDialog () {
+        this.$store.dispatch('switchRegistDialog', {status: false})
+      },
+      help () {
+        this.closeRegistDialog()
+        this.$router.push({name: 'Protocol', query: {name: 'point_protocol.html', title: '云庐积分规则', from: 'web'}})
+      },
+      viewIntegral () {
+        this.closeRegistDialog()
+        this.$router.push({name: 'Download'})
+      },
+      goDownload (type) {
+        if (type === 'regist') {
+          this.closeRegistGuidDialog()
+        } else {
+          this.closeMakeCardDialog()
+        }
+        window.location.href = 'http://a.app.qq.com/o/simple.jsp?pkgname=com.yunlu6.yunlu'
+      },
+      closeMakeCardDialog () {
+        this.$store.dispatch('switchMakeCardDialog', {status: false})
+      },
+      closeRegistGuidDialog () {
+        this.$store.dispatch('switchGuidDialog', {status: false})
+        removeStore('shareIntegral')
+        removeStore('guidParams')
+      },
+      closeDownloadBar () {
+        this.$store.dispatch('closeDownloadBar', {status: true})
+      },
+      closeRegistBar () {
+        this.$store.dispatch('closeRegistBar', {status: true})
+      },
+      makeCard () {
+        this.$store.dispatch('switchMakeCardDialog', {status: true})
+      },
+      removeMessage (item) {
+        this.messages.splice(this.findArrayIndex(item._lcattrs.id, '_lcattrs.id', this.messages), 1)
+      },
+      findArrayIndex (item, props, arr) {
+        let index = -1
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[props] === i) {
+            index = i
+            break
+          }
+        }
+        return index
+      },
+      handleRegistGuidDialog (item) {
+        this.removeMessage(item)
+        this.$store.dispatch('switchGuidDialog', {status: true})
+        this.$store.dispatch('setOrganizationDialogInfo', {
+          detail: {
+            name: item._lcattrs.organization_name,
+            logo: item._lcattrs.organization_logo,
+            type: item._lcattrs.clazz === 'groups_users.new_outer_guide_to_staff' ? 'Enterprise' : (item._lcattrs.clazz === 'groups_users.new_member_to_staff' ? 'Mall' : '')
+          }
+        })
+      }
+    },
+    updated () {
+      this.beforeInit()
+    },
+    computed: {
+      ...mapGetters([
+        'registModal',
+        'registSuccessModal',
+        'leanCloudActive',
+        'makeCardModal',
+        'showDownloadBar',
+        'onlyMobile',
+        'registGuidSuccess',
+        'registGuidSuccessDetail',
+        'showRegistBar',
+        'hasCloseRegistBar',
+        'sharerInfo'
+      ])
+    }
+  }
+</script>
+
+<style lang="scss" scoped>
+  @import './styles/mixin';
+
+</style>
+
+<style lang="scss">
+  @import './styles/common';
+  @import './styles/mixin';
+  .router-fade-enter-active, .router-fade-leave-active {
+    transition: opacity .1s;
+	}
+	.router-fade-enter, .router-fade-leave-active {
+    opacity: 0;
+	}
+  #app {
+    background-color: $tenth-grey;
+    width: 100%;
+    max-width: 540px;
+    min-height: 100%;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+  }
+  // symbols （iconfont彩色图标）
+  .icon {
+    width: 1em; height: 1em;
+    vertical-align: -0.15em;
+    fill: currentColor;
+    overflow: hidden;
+  }
+  .mint-indicator-mask {
+    z-index: 1004 !important;
+  }
+  .mint-indicator-wrapper {
+    z-index: 1004 !important;
+  }
+  .mint-msgbox-wrapper {
+    max-width: 440px !important;
+    .mint-msgbox {
+      max-width: 360px !important;
+    }
+  }
+  .mint-msgbox-confirm {
+    color: $green !important;
+  }
+  .mint-msgbox-confirm:active {
+    color: $green !important;
+  }
+  .mint-header-title {
+    height: inherit !important;
+    @include px2rem(line-height, 88px);
+  }
+  // 公共样式，放在公共文件中，避免部分页面没有加载而找不到样式文件
+  .toast-icon-big {
+    @include font-dpr(36px);
+    @include pm2rem(margin, 0px, 0px, -20px, 0px);
+  }
+  .toast-content {
+    background-color: rgba(0, 0, 0, .7);
+    @include px2rem(width, 400px);
+    box-shadow: 0px 0px 10px 2px rgba(0, 0, 0, 0.5);
+    @include pm2rem(margin, -20px, 0px, -10px, 0px);
+    padding: 0 !important;
+    @include px2rem(border-radius, 14px);
+    span {
+      @include font-dpr(16px);
+      @include px2rem(margin-bottom, 30px);
+    }
+  }
+
+  @keyframes rotateTo90 {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(90deg);
+    }
+  }
+  @keyframes rotateTo0 {
+    from {
+      transform: rotate(90deg);
+    }
+    to {
+      transform: rotate(0deg);
+    }
+  }
+  @keyframes bounceIn {
+    from, 20%, 40%, 60%, 80%, to {
+      animation-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1.000);
+    }
+    0% {
+      opacity: 0;
+      transform: scale3d(.3, .3, .3);
+    }
+    20% {
+      transform: scale3d(1.1, 1.1, 1.1);
+    }
+    40% {
+      transform: scale3d(.9, .9, .9);
+    }
+    60% {
+      opacity: 1;
+      transform: scale3d(1.03, 1.03, 1.03);
+    }
+    80% {
+      transform: scale3d(.97, .97, .97);
+    }
+    to {
+      opacity: 1;
+      transform: scale3d(1, 1, 1);
+    }
+  }
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translate3d(0, -100%, 0);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fadeOutUp {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+      transform: translate3d(0, -100%, 0);
+    }
+  }
+</style>

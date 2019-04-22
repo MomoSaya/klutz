@@ -1,0 +1,2105 @@
+<template>
+  <section>
+    <div class="container" ref="productDetail" :style="{height: scrollHeight}">
+      <!-- 修复在手机QQ浏览器中滚动时闪烁问题 -->
+      <div style="position: relative; transform-style: preserve-3d;">
+        <product-header
+          :unread-message="unReadeMsgs.length > 0"
+          @back="goBack()"
+          @open-favorites="openFavorites()"
+          @report="goReport()"
+          @home="goHome()"
+          @search="searchProduct()"
+          @message="goConversation()">
+        </product-header>
+        <div class="swipe">
+          <swiper :options="swiperOption">
+            <swiper-slide v-for="(item, index) in productDetailFiles" :key="index">
+              <div
+                v-lazy:background-image="{
+                  src: item.url,
+                  error: 'http://oatl31bw3.bkt.clouddn.com/imgLoadingError.png',
+                  loading: 'http://oatl31bw3.bkt.clouddn.com/imgLoading3.jpg'
+                }"
+                class="swipe-img"
+                @click="viewFullScreenPic(index, productDetailFiles)">
+              </div>
+            </swiper-slide>
+            <div class="swiper-pagination" slot="pagination"></div>
+          </swiper>
+          <img v-if="productDetail && productDetail.promotion" class="activity-tag" src="../../assets/activityTag.png">
+          <span
+            v-if="productDetailFiles && productDetailFiles.length"
+            class="page-nav white font-16">{{currentIndex}}/{{productDetailFiles.length}}</span>
+          <span v-else class="page-nav white font-16">0/0</span>
+        </div>
+      </div>
+      <section class="info-container white-bg">
+        <div v-if="productDetail && productDetail.name" class="name">
+          <div v-if="productDetail.promotion" class="tag-wrapper">
+            <span class="promotion-tag" :class="{'tag-green': productDetail.promotion.tag === '秒杀', 'tag-red': productDetail.promotion.tag === 'HOT', 'tag-orange': productDetail.promotion.tag === 'NEW'}">
+              {{productDetail.promotion.tag}}
+            </span>
+          </div>
+          <span class="text">{{productDetail.name}}</span>
+        </div>
+        <div v-else class="name font-17">&nbsp;</div>
+        <div class="money">
+          <div class="num ellipsis">
+            <span class="price-icon">&yen;</span>
+            <span
+              v-if="productDetail && productDetail.prices && productDetail.prices.length > 0 && !!currentPrice.money"
+              class="price-num">{{handleDiscountPrice(currentPrice.money, productDetail.promotion)}}</span>
+            <span
+              v-else-if="productDetail && productDetail.prices && productDetail.prices.length === 0"
+              class="price-num">定制</span>
+            <span v-else class="price-num">&nbsp;</span>
+          </div>
+          <div v-if="productDetail && productDetail.prices && productDetail.prices.length > 0 && !!currentPrice.money && !!productDetail.promotion && productDetail.promotion.rate && !!handleDiscountPrice(currentPrice.money, productDetail.promotion)" class="discount ellipsis">
+            <del>
+              <span class="price-icon">&yen;</span>
+              <span class="price-num">{{currentPrice.money}}</span>
+            </del>
+          </div>
+          <div v-if="shouldCountDown" class="countdown">
+            <div class="countdown-text">{{countdownText}}</div>
+            <div class="clockrun">
+              <span class="number hour">{{countdownTime.day}}</span>
+              <span class="dot day">天</span>
+              <span class="number min">{{countdownTime.hour}}</span>
+              <span class="dot">:</span>
+              <span class="number sec">{{countdownTime.min}}</span>
+              <span class="dot">:</span>
+              <span class="number wsec">{{countdownTime.sec}}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex tag-wrapper">
+          <div
+            v-if="productDetail && productDetail.prices && productDetail.prices.length > 0"
+            class="inventory font-13 second-text">
+            库存 ：{{productDetail.prices[0].amount || '定制'}}
+          </div>
+          <div
+            v-else-if="productDetail && productDetail.prices && productDetail.prices.length === 0"
+            class="inventory font-13 second-text">库存 ：定制</div>
+          <div
+            v-else
+            class="inventory font-13 second-text">
+            库存 ：0
+          </div>
+        </div>
+      </section>
+      <section class="price-container white-bg">
+        <a class="flex-between" @click="expandMorePrice()">
+          <span class="font-14 second-text">{{priceText}}</span>
+          <i class="iconfont icon-you primary font-14"></i>
+        </a>
+      </section>
+      <section>
+        <div class="nav-bars">
+          <div
+            v-for="(item, index) in tabOptions"
+            :key="index"
+            class="tab-wrapper">
+            <a
+              class="tab"
+              :class="{'tab-active': tabIndex === index}"
+              @click="selectTab(index)">
+              <span>{{item.label}}</span>
+              <div :class="{'selected': tabIndex === index}"></div>
+            </a>
+          </div>
+        </div>
+        <div class="nav-bar-container">
+          <transition name="fade" mode="out-in">
+            <div
+              v-if="tabIndex === 0"
+              key="one"
+              class="productdetail-product-item">
+              <template v-if="productDetail && productDetail.goods_type === 'Medicament'">
+                <div class="row-item">
+                  <div class="title-container">
+                    <i class="iconfont icon-circle dot"></i>
+                    <span class="title">功能主治 : {{productDetail.indication}}</span>
+                  </div>
+                </div>
+              </template>
+              <template v-if="productDetail && productDetail.goods_type === 'StoneMaterial'">
+                <div class="row-item">
+                  <div class="title-container">
+                    <i class="iconfont icon-circle dot"></i>
+                    <span class="title">{{productDetail.taxonomy.name}} /{{productDetail.taxonomy.colour_desc[1]}} /{{productDetail.taxonomy.depth_desc[1]}} /{{productDetail.taxonomy.pattern_desc[1]}}</span>
+                  </div>
+                  <div
+                    v-if="productDetail.surface && productDetail.surface.name &&  productDetail.surface.product_class && productDetail.surface.product_class.name"
+                    class="title-container">
+                    <i class="iconfont icon-circle dot"></i>
+                    <div class="title">{{productDetail.surface.product_class.name}} /{{productDetail.surface.name}}</div>
+                  </div>
+                </div>
+              </template>
+              <template v-if="productDetail && productDetail.properties && productDetail.properties.length > 0">
+                <div
+                  v-for="(item, index) in productDetail.properties"
+                  :key="index"
+                  class="row-item">
+                  <div
+                    v-for="(i, indexI) in item.children"
+                    :key="indexI"
+                    class="row-container">
+                    <div
+                      v-if="handleChildProperties(i)"
+                      class="sub-row-title">
+                      <i class="iconfont icon-circle dot"></i>
+                      <div class="title">{{i.name}} : {{i.value}}</div>
+                      <i
+                        v-for="(j, indexJ) in i.quotes"
+                        :key="indexJ"
+                        class="iconfont icon-guanlian"
+                        @click="openPopDialog(j)">
+                      </i>
+                    </div>
+                    <div
+                      v-for="(m, indexM) in i.children"
+                      :key="indexM"
+                      class="sub-item">
+                      <div
+                        v-if="handleChildProperties(m)"
+                        class="title">{{m.name}} : {{m.value}}</div>
+                        <div
+                          v-for="(n, indexN) in m.children"
+                          :key="indexN"
+                          class="third-row-container">
+                          <div class="third-item">
+                            <div
+                              v-if="n.name && n.value"
+                              class="title">{{n.name}} : {{n.value}}</div>
+                          </div>
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template v-if="!hasProperties">
+                <div class="no-product-args">
+                  <img src="../../assets/noComment.png">
+                  <p>该产品暂无产品参数</p>
+                </div>
+              </template>
+            </div>
+            <div
+              v-if="tabIndex === 1"
+              key="two"
+              class="productdetail-product-tags white-bg">
+              <template v-if="archives && archives.length > 0">
+                <div
+                  v-for="(item, index) in archives"
+                  :key="index"
+                  @click="viewArchives(item)"
+                  class="tag second-text font-14">{{item.name}}</div>
+              </template>
+              <div v-else class="no-info empty-margin">
+                <img src="../../assets/noComment.png">
+                <p>该产品暂无关联信息</p>
+              </div>
+            </div>
+            <div
+              v-if="tabIndex === 2"
+              key="three"
+              class="productdetail-comments white-bg">
+              <template v-if="comments.length > 0">
+                <comment :store="comments" :num="commentsLength">
+                </comment>
+                <div class="more-comments">
+                  <a class="btn" @click="viewMoreComments()">查看更多评价</a>
+                </div>
+              </template>
+              <div v-else class="no-info">
+                <img src="../../assets/noComment.png">
+                <p>该产品暂无评价</p>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </section>
+      <section class="flex-between company-info white-bg">
+        <div class="wraper">
+          <div class="company-img">
+            <img
+              v-if="productDetailTeam && productDetailTeam.logo"
+              :src="productDetailTeam.logo">
+            <div v-else></div>
+          </div>
+          <div class="content-wraper ellipsis">
+            <div class="flex-between company-content">
+              <div
+                v-if="productDetailTeam && productDetailTeam.company"
+                class="title ellipsis font-16">
+                {{productDetailTeam.company}}
+              </div>
+              <div v-else class="title ellipsis empty-title">&nbsp;</div>
+              <div class="info">
+                <div class="flex icon-box">
+                  <svg
+                    v-if="productDetailTeam && productDetailTeam.company"
+                    class="icon large"
+                    aria-hidden="true">
+                    <use xlink:href="#icon-zhenshi4"></use>
+                  </svg>
+                  <div v-else class="empty-svg"></div>
+                </div>
+                <div
+                  v-if="productDetailTeam && productDetailTeam.service && productDetailTeam.service.name"
+                  class="flex service-tag">
+                  {{productDetailTeam.service.name}}
+                </div>
+                <div v-else class="service-tag empty-tag"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="buttons">
+          <a class="flex" @click="goEnterprise(false)">
+            <div class="flex icon-box">
+              <i class="flex iconfont icon-shangcheng"></i>
+            </div>
+            <span>进店逛逛</span>
+          </a>
+          <a class="flex" @click="goEnterprise(true)">
+            <div class="flex icon-box">
+              <i class="flex iconfont icon-quanbushangpin"></i>
+            </div>
+            <span>全部商品</span>
+          </a>
+        </div>
+      </section>
+    </div>
+    <section class="product-tab-bar white-bg full-width">
+      <div
+        class="btn-box"
+        @click="openIm()">
+        <i class="iconfont icon-kefu font-17 kefu"></i>
+        <span class="font-12 kefu">客服</span>
+      </div>
+      <div
+        class="btn-box second-text"
+        @click="addFavorites()">
+        <i
+          class="iconfont icon-shoucang1 font-17"
+          v-bind:class="{'bottom-btn-active': hasAddFavorites}"></i>
+        <span
+          class="font-12"
+          v-bind:class="{'bottom-btn-active': hasAddFavorites}">{{favoratesText}}</span>
+      </div>
+      <div
+        class="btn-box second-text"
+        @click="openShoppingCar()">
+        <i class="iconfont icon-gouwuche1 font-17"></i>
+        <span class="font-12">购物车</span>
+        <div
+          v-show="purchaseItemsCount !== '0'"
+          class="badge"
+          :class="{'active': hasAddShoppingCar}">
+          <span>{{purchaseItemsCount}}</span>
+        </div>
+      </div>
+      <div class="btn-box btn-shopping-car" @click="expandMorePrice()">
+        <span class="font-14 white">{{shoppingCarText}}</span>
+      </div>
+      <div class="btn-box btn-buy" @click="expandMorePrice()">
+        <span class="font-14 white">立即购买</span>
+      </div>
+    </section>
+    <section v-if="popUp" class="product-popup-dialog">
+      <div class="main absolute-horizontal">
+        <div class="title primary-bg white font-16">
+          <span>购销渠道关系认证成功</span>
+        </div>
+        <div class="content white-bg">
+          <div v-if="JSON.stringify(teamLink) !== '{}'" class="item" @click="goLinkEnterpriseDetail(teamLink)">
+            <img v-if="teamLink && teamLink.logo" :src="teamLink.logo">
+            <img v-else src="../../assets/blank.jpg">
+            <div class="info">
+              <p class="font-13 second-text ellipsis">{{teamLink.company}}</p>
+              <div>
+                <span class="font-12 third-text">{{teamLink.service.name}}</span>
+                <span class="font-12 third-text width-limit ellipsis">{{teamLink.provice_name}}&middot;{{teamLink.city_name}}</span>
+                <span v-if="teamLink.state !== 'approved'" class="font-12 third-text">已注销</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="JSON.stringify(productLink) !== '{}'" class="item" @click="goLinkProductDetail(productLink)">
+            <img v-if="!!productLinkFile && productLinkFile.url" :src="productLinkFile.url">
+            <img v-else src="../../assets/imgLoadingError.png">
+            <div class="info">
+              <p>{{productLink.name}}</p>
+              <div>
+                <span
+                  v-if="productLink.prices && productLink.prices.length > 0 && productLink.prices[0].money !== '定制'"
+                  class="product-price">{{productLink.prices[0].money}}元</span>
+                <span v-else class="product-price">{{productLink.prices[0].money}}</span>
+                <span v-if="productLink.state === 'editing'" class="font-12 third-text">已下架</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="footer white-bg font-16 second-text"
+          @click="closePopup()">
+          <span>取消</span>
+        </div>
+      </div>
+    </section>
+    <div v-show="showPreview">
+      <div class="option-bar full-width">
+        <div
+          class="close"
+          @click="closePreview()">
+          <i class="iconfont icon-fanhui"></i>
+        </div>
+        <span class="preview-page-nav white flex font-20">{{currentFullScreenIndex}}/{{previewImgs.length}}</span>
+      </div>
+      <swiper
+        :options="swiperOptionFullScreen"
+        class="full-screen-swiper"
+        ref="productDetailSwiper">
+        <!-- slides -->
+        <swiper-slide
+          class="swiper-zoom-container full-screen-bg"
+          v-for="(item, index) in previewImgs"
+          :key="index">
+          <img
+            v-lazy="{
+              src: item.url,
+              error: 'http://oatl31bw3.bkt.clouddn.com/imgLoadingError.png',
+              loading: 'http://oatl31bw3.bkt.clouddn.com/imgLoading3.jpg'
+            }"
+            alt="">
+        </swiper-slide>
+      </swiper>
+    </div>
+    <template v-if="productDetail && productDetail.prices && productDetail.prices.length >= 1">
+      <product-sku
+        :show="morePrice"
+        :store="productDetail"
+        :img="productDetailFiles"
+        :price="currentPrice"
+        :price-properties="currentPriceProperties"
+        :choosed="hasChoosePrice"
+        :quantity="quantity"
+        :disabled="currentPrice.money === '定制' || currentPrice.amount === '定制' || currentPrice.money === '赠品'"
+        @increase="increase"
+        @decrease="decrease"
+        @handle-quantity="handleInput"
+        @change-price="changePrice"
+        @close="closeSku"
+        @add-shopping-cart="addShoppingCar"
+        @buy-now="buyNow">
+      </product-sku>
+    </template>
+    <bind-mobile
+      :show="bindMobileModal"
+      @close="closeBindMobile"
+      @next="bindMobileNext">
+    </bind-mobile>
+  </section>
+</template>
+
+<script>
+  import ProductHeader from '../../components/header/Head'
+  import ProductSku from '../../components/product/ProductSku'
+  import { swiper, swiperSlide } from 'vue-awesome-swiper'
+  import BindMobile from '../../components/common/BindMobile'
+  import Comment from '../../components/common/Comment'
+  import { getStore, setStore, removeStore } from '../../config/mUtils'
+  import { mapGetters } from 'vuex'
+  import moment from 'moment'
+  import { Toast } from 'mint-ui'
+  export default {
+    props: ['id'],
+    name: 'ProductDetail',
+    data () {
+      return {
+        currentIndex: 1,
+        currentFullScreenIndex: 1,
+        token: getStore('user') ? getStore('user').authentication_token : '',
+        mobile: getStore('user') ? getStore('user').mobile : '',
+        currentTeamId: '',
+        productId: this.$route.params.id,
+        hasLogin: !!getStore('user'),
+        hasProperties: true,
+        hasAddFavorites: false,
+        hasAddShoppingCar: false,
+        purchaseItemsCount: '0', // 超过99显示99+
+        shoppingCarText: '加入购物车',
+        favoratesText: '收藏',
+        priceText: '请选择更多商品价格',
+        hasChoosePrice: false,
+        quantity: 1,
+        buyQuantity: 1,
+        productLink: {},
+        productLinkFile: {},
+        teamLink: {},
+        morePrice: false,
+        currentPrice: {},
+        currentPriceProperties: [],
+        popUp: false,
+        showPreview: false,
+        previewImgs: [],
+        tempArchivesFiles: [],
+        swiperOption: {
+          pagination: '.swiper-pagination',
+          paginationClickable: true,
+          onSlideChangeEnd: (swiper) => {
+            this.currentIndex = swiper.activeIndex + 1
+          }
+        },
+        swiperOptionFullScreen: {
+          notNextTick: false,
+          autoplay: 0,
+          direction: 'horizontal',
+          grabCursor: true,
+          setWrapperSize: true,
+          autoHeight: false,
+          paginationClickable: false,
+          prevButton: null,
+          nextButton: null,
+          mousewheelControl: true,
+          observeParents: true,
+          preventClicks: false,
+          passiveListeners: false,
+          zoom: true,
+          height: window.innerHeight,
+          width: window.innerWidth,
+          initialSlide: 0,
+          onSlideChangeEnd: (swiper) => {
+            this.currentFullScreenIndex = swiper.activeIndex + 1
+          }
+        },
+        productDetail: null,
+        productDetailFiles: [],
+        allPriceProperties: [],
+        archives: [],
+        teams: null,
+        productDetailTeam: [],
+        deliveries: [],
+        scrollHeight: '15rem',
+        tabIndex: 0,
+        tabOptions: [
+          {
+            label: '产品参数'
+          }, {
+            label: '关联信息'
+          }, {
+            label: '评价'
+          }
+        ],
+        shouldCountDown: false,
+        countdownText: '距离结束剩余',
+        countdownTime: {
+          day: '00',
+          hour: '00',
+          min: '00',
+          sec: '00',
+          wsec: '00'
+        },
+        interval: null,
+        baseComments: [],
+        comments: [],
+        commentsLength: 0
+      }
+    },
+    components: {
+      ProductHeader,
+      ProductSku,
+      swiper,
+      swiperSlide,
+      BindMobile,
+      Comment
+    },
+    methods: {
+      selectTab (index) {
+        this.tabIndex = index
+      },
+      getProductDetail (productId = this.id) {
+        this.$store.dispatch('commonAction', {
+          url: `/v1/products/${productId}`,
+          method: 'get',
+          params: {
+            id: productId,
+            token: this.token
+          },
+          target: this,
+          resolve: (state, res) => {
+            if (productId === this.id) {
+              this.hasAddFavorites = res.data.products.favorable
+              this.favoratesText = res.data.products.favorable ? '已收藏' : '收藏'
+              this.productDetail = res.data.products
+              this.currentTeamId = res.data.products.organization_id
+              this.hasProperties = this.handleProperties(res.data.products)
+              this.getFilesPublisheds(this.handleProductFiles(res.data.products.files), res.data.products.files, productId, res.data.products.organization_id)
+            } else {
+              this.productLink = res.data.products
+              this.getFilesPublisheds([this.handleProductFiles(res.data.products.files)[0]], res.data.products.files, productId, res.data.products.organization_id)
+            }
+          },
+          reject: () => {
+          }
+        })
+      },
+      handleProperties (productDetail) {
+        // 当产品类型为StoneMaterial或Medicament时，一定有附加的产品属性，判断时，排除这两种情况。
+        if (productDetail.goods_type !== 'StoneMaterial' && productDetail.goods_type !== 'Medicament') {
+          let index = 0
+          let subIndex = 0
+          for (let i = 0; i < productDetail.properties.length; i++) {
+            if (productDetail.properties[i].children.length === 0) {
+              index += 1
+            } else {
+              for (let j = 0; j < productDetail.properties[i].children.length; j++) {
+                if (!productDetail.properties[i].children[j].name || !productDetail.properties[i].children[j].value) {
+                  // 如果产品二级属性没有属性值，接着判断其有没有三级属性，如果没有，则此二级属性为空
+                  if (productDetail.properties[i].children[j].children.length === 0) {
+                    subIndex += 1
+                  }
+                }
+              }
+              // 该产品一级属性值全为空，则该产品也不可能有二级属性(默认不显示根属性，从一级属性开始)
+              if (subIndex === productDetail.properties[i].children.length) {
+                index += 1
+              }
+            }
+          }
+          return index !== productDetail.properties.length
+        } else {
+          return true
+        }
+      },
+      // 参数为一级或二级属性(如果属性的子属性有值，则需要显示完整上级属性名)
+      handleChildProperties (prop) {
+        let flag = false
+        if (prop.name && prop.value) {
+          return true
+        }
+        if (prop.children.length === 0) {
+          return false
+        }
+        for (let i = 0; i < prop.children.length; i++) {
+          if (prop.children[i].name && prop.children[i].value) {
+            flag = true
+            break
+          }
+          if (prop.children[i].children && prop.children[i].children.length > 0) {
+            for (let j = 0; j < prop.children[i].children.length; j++) {
+              if (prop.children[i].children[j].name && prop.children[i].children[j].value) {
+                flag = true
+                break
+              }
+            }
+          }
+        }
+        return flag
+      },
+      getAllPriceProperties (categoryId, productId, teamId) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/price_properties',
+          method: 'get',
+          params: {
+            category_id: categoryId
+          },
+          target: this,
+          resolve: (state, res) => {
+            this.allPriceProperties = res.data.properties
+            this.currentPrice = this.productDetail.prices[0] || {money: '定制', amount: '定制', properties: []}
+            this.canCountDown(this.currentPrice.money, this.productDetail, new Date(res.headers.date))
+            this.currentPriceProperties = this.handlePricePropertyes(this.currentPrice, res.data.properties)
+            this.getProductArchives(productId, teamId)
+          },
+          reject: () => {
+          }
+        })
+      },
+      // 手机QQ浏览器和UC浏览器不支持array.findIndex语法
+      handlePricePropertyes (price, priceProperties) {
+        let tmpArr = []
+        for (let j = 0; j < price.properties.length; j++) {
+          for (let i = 0; i < priceProperties.length; i++) {
+            let key = Object.keys(price.properties[j])[0]
+            if (priceProperties[i].aliaz === key) {
+              if (priceProperties[i].options.length > 0) {
+                for (let m = 0; m < priceProperties[i].options.length; m++) {
+                  if (priceProperties[i].options[m].id === price.properties[j][key]) {
+                    tmpArr.push({key: priceProperties[i].name, value: priceProperties[i].options[m].name})
+                  }
+                }
+              } else {
+                tmpArr.push({key: priceProperties[i].name, value: price.properties[j][key]})
+              }
+            }
+          }
+        }
+        return tmpArr
+      },
+      handleProductFiles (arr) {
+        let tmpArr = []
+        for (let i = 0; i < arr.length; i++) {
+          tmpArr.push(arr[i].file_id)
+        }
+        return tmpArr
+      },
+      getFilesPublisheds (ids, files, productId, teamId) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/links/files/publisheds',
+          method: 'get',
+          params: {
+            type: 'product',
+            team_id: teamId,
+            thumbs: ['general'],
+            ids: ids
+          },
+          target: this,
+          resolve: (state, res) => {
+            if (productId === this.id) {
+              this.productDetailFiles = this.sortProductDetailFiles(ids, res.data.files)
+              this.getAllPriceProperties(this.productDetail.category_id, productId, teamId)
+            } else {
+              // 关联产品图片只需获取封面(传的ids参数也是只有一个元素的数组)
+              this.productLinkFile = res.data.files[0]
+              this.getOrganization(productId, teamId)
+            }
+          },
+          reject: () => {
+          }
+        })
+      },
+      sortProductDetailFiles (products, files) {
+        let tmpArr = []
+        for (let i = 0; i < products.length; i++) {
+          for (let j = 0; j < files.length; j++) {
+            if (products[i] === files[j].id) {
+              tmpArr.push(files[j])
+            }
+          }
+        }
+        return tmpArr
+      },
+      getProductArchives (productId, teamId) {
+        this.$store.dispatch('commonAction', {
+          url: `/v1/products/${productId}/archives`,
+          method: 'get',
+          params: {},
+          target: this,
+          resolve: (state, res) => {
+            this.archives = res.data.archives
+            this.getOrganization(productId, teamId)
+          },
+          reject: () => {
+          }
+        })
+      },
+      getArchivesFiles (ids) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/links/files/publisheds',
+          method: 'get',
+          params: {
+            type: 'document',
+            team_id: this.currentTeamId,
+            thumbs: ['general'],
+            ids: ids
+          },
+          target: this,
+          resolve: (state, res) => {
+            this.tempArchivesFiles = res.data.files
+            this.currentFullScreenIndex = 1
+            this.viewFullScreenPic(0, res.data.files)
+          },
+          reject: () => {
+          }
+        })
+      },
+      getOrganization (productId = this.id, teamId = '') {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/links/teams',
+          method: 'get',
+          params: {
+            ids: [teamId]
+          },
+          target: this,
+          resolve: (state, res) => {
+            if (productId === this.id) {
+              this.productDetailTeam = res.data.teams[0]
+              this.shouldGetDeliveries(this.token)
+            } else {
+              this.teamLink = res.data.teams[0]
+              this.openPopup()
+            }
+            this.getPurchaseItems()
+          },
+          reject: () => {
+          }
+        })
+      },
+      shouldGetDeliveries (token) {
+        if (this.hasLogin) {
+          this.getDeliveries(token, false)
+        }
+      },
+      // 获取收获地址
+      getDeliveries (token, buying = false) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/deliveries',
+          method: 'get',
+          params: {
+            token: token
+          },
+          target: this,
+          resolve: (state, res) => {
+            this.deliveries = res.data.deliveries
+            if (buying) {
+              if (this.deliveries.length === 0) {
+                removeStore('editAddress')
+                this.$router.push({name: 'AddAddress'})
+              } else {
+                this.$router.push({name: 'OrderPaying'})
+              }
+            }
+          },
+          reject: () => {
+          }
+        })
+      },
+      // 获取购物车中的产品数量
+      getPurchaseItems () {
+        if (this.hasLogin) {
+          this.$store.dispatch('commonAction', {
+            url: '/v1/purchase_items',
+            method: 'get',
+            params: {
+              token: this.token
+            },
+            target: this,
+            resolve: (state, res) => {
+              if (res.data.purchase_items.length > 0) {
+                let purchaseItems = this.handlePurchaseItems(res.data.purchase_items)
+                this.purchaseItemsCount = this.handlePurchaseItemsCount(purchaseItems)
+              }
+            },
+            reject: () => {
+            }
+          })
+        }
+      },
+      handlePurchaseItemsCount (arr) {
+        let count = 0
+        for (let i = 0; i < arr.length; i++) {
+          count += arr[i].quantity
+        }
+        if (count > 99) {
+          return '99+'
+        } else {
+          return count + ''
+        }
+      },
+      handlePurchaseItems (arr) {
+        let tmpArr = []
+        for (let i = 0; i < arr.length; i++) {
+          if (arr[i].price) {
+            tmpArr.push(arr[i])
+          }
+        }
+        return tmpArr
+      },
+      handleProducts (arr, arr2) {
+        let tmpArr = []
+        for (let i = 0; i < arr.length; i++) {
+          let index = arr2.findIndex(item => item.id === arr[i].file_id)
+          let tmpObj = {...arr[i], file_url: arr2[index].url, file_thumb_urls: arr2[index].thumb_urls[0]}
+          tmpArr.push(tmpObj)
+        }
+        return tmpArr
+      },
+      viewFullScreenPic (index, arr) {
+        this.currentFullScreenIndex = index + 1
+        this.previewImgs = arr
+        this.$refs.productDetailSwiper.swiper.slideTo(index, 1, true)
+        this.showPreview = true
+      },
+      closePreview () {
+        this.showPreview = false
+        this.currentFullScreenIndex = 1
+      },
+      expandMorePrice () {
+        if (this.productDetail.prices.length === 1) {
+          this.hasChoosePrice = true
+        }
+        this.morePrice = true
+      },
+      closeSku () {
+        this.morePrice = false
+      },
+      changePrice (item) {
+        this.currentPrice = item
+        this.priceText = `已选：￥${item.money}`
+        this.hasChoosePrice = true
+        this.handleInput(item)
+        this.currentPriceProperties = this.handlePricePropertyes(this.currentPrice, this.allPriceProperties)
+      },
+      handleInput (item) {
+        if (parseInt(item.quantity + '') >= parseInt(item.amount + '')) {
+          this.quantity = parseInt(item.amount + '')
+        } else if (parseInt(item.quantity + '') <= 0 || !item.quantity) {
+          this.quantity = 1
+        } else {
+          this.quantity = parseInt(item.quantity)
+        }
+      },
+      increase () {
+        this.quantity += 1
+      },
+      decrease () {
+        this.quantity -= 1
+      },
+      viewArchives (item) {
+        this.getArchivesFiles(this.handleProductFiles(item.files))
+      },
+      openPopDialog (item) {
+        switch (item.origin_type) {
+          case 'Product':
+            this.getProductDetail(item.origin.id)
+            break
+          case 'Organization':
+            this.getOrganization(item.origin.id, item.origin.id)
+            break
+          case 'Archive':
+            // TODO: 关联文件
+            break
+          default:
+            this.getProductDetail(item.origin.id)
+            break
+        }
+      },
+      openPopup () {
+        this.popUp = true
+      },
+      closePopup () {
+        this.allowTouchMove()
+        setTimeout(() => {
+          this.popUp = false
+        }, 400)
+      },
+      goBack () {
+        if (getStore('ProductDetail_goHome')) {
+          removeStore('ProductDetail_goHome')
+          this.$router.push({name: 'See'})
+        } else {
+          this.$router.go(-1)
+        }
+      },
+      goReport () {
+        this.$router.push({name: 'Report', query: {resourceId: this.id, resourceClass: 'product'}})
+      },
+      goHome () {
+        this.$router.push({name: 'See'})
+      },
+      goLogin (onlyMobile = false) {
+        this.$store.dispatch('switchIntegralDialog', {status: true, onlyMobile: onlyMobile})
+      },
+      addFavorites () {
+        if (this.hasLogin && !this.hasAddFavorites) {
+          this.favoritesRequest()
+        } else if (this.hasLogin && this.hasAddFavorites) {
+          this.removeFavorites()
+        } else {
+          this.goLogin()
+        }
+      },
+      handleActivityProducts (state, id, bool) {
+        if (state.activityProducts.length === 0) {
+          return false
+        }
+        let index = null
+        for (let i = 0; i < state.activityProducts.length; i++) {
+          if (state.activityProducts[i].id === id) {
+            index = i
+          }
+        }
+        if (index !== null) {
+          state.activityProducts[index].favorable = bool
+        }
+      },
+      favoritesRequest () {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/favorites',
+          method: 'post',
+          params: {},
+          data: {
+            token: this.token,
+            product_id: this.id
+          },
+          target: this,
+          resolve: (state, res) => {
+            if (res.data.favorites && res.data.favorites.id === parseInt(this.id)) {
+              this.hasAddFavorites = true
+              this.favoratesText = '已收藏'
+              Toast({
+                message: '你已成功收藏该产品',
+                className: 'toast-content',
+                iconClass: 'iconfont icon-caozuochenggong toast-icon-big',
+                duration: 1000
+              })
+              this.handleActivityProducts(state, res.data.favorites.id, true)
+            } else {
+              Toast({
+                message: '收藏该产品失败',
+                duration: 1000
+              })
+            }
+          },
+          reject: () => {
+          }
+        })
+      },
+      removeFavorites () {
+        this.$store.dispatch('commonAction', {
+          url: `/v1/favorites/${this.id}`,
+          method: 'delete',
+          params: {},
+          data: {
+            token: this.token,
+            type: 'Product'
+          },
+          target: this,
+          resolve: (state, res) => {
+            if (res.data.favorable_type && res.data.favorable_type === 'Product') {
+              this.getProductDetail()
+              this.hasAddFavorites = false
+              this.favoratesText = '收藏'
+              Toast({
+                message: '你已成功取消收藏',
+                duration: 500
+              })
+              this.handleActivityProducts(state, this.id, false)
+            } else {
+              Toast({
+                message: '取消收藏该产品失败',
+                duration: 1000
+              })
+            }
+          },
+          reject: () => {
+          }
+        })
+      },
+      openIm () {
+        if (!this.hasLogin) {
+          this.goLogin()
+        } else {
+          this.$router.push({name: 'Chat', query: {type: 'Product', teamId: this.currentTeamId, productId: this.id, productImg: this.productDetailFiles[0].url, productPrice: this.currentPrice.money, productName: this.productDetail.name}})
+        }
+      },
+      openShoppingCar () {
+        if (this.hasLogin) {
+          this.$router.push({name: 'ShoppingCart'})
+        } else {
+          this.goLogin()
+        }
+      },
+      checkBeforeBuying () {
+        if (!this.hasChoosePrice) {
+          Toast({
+            message: '请选择一个价格',
+            duration: 500
+          })
+          return false
+        } else {
+          return true
+        }
+      },
+      addShoppingCar (quantity) {
+        if (this.checkBeforeBuying()) {
+          if (this.hasLogin) {
+            this.addShoppingCarRequest(quantity)
+            this.closeSku()
+            this.quantity = 1
+          } else {
+            this.goLogin()
+          }
+        }
+      },
+      addShoppingCarRequest (quantity) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/purchase_items',
+          method: 'post',
+          params: {},
+          data: {
+            token: this.token,
+            price_id: this.currentPrice.id,
+            quantity: quantity
+          },
+          target: this,
+          resolve: (state, res) => {
+            // 该机构新增了一条访客记录
+            if (res.data.purchase_items && res.data.purchase_items.price && res.data.purchase_items.price.id === this.currentPrice.id) {
+              this.getPurchaseItems()
+              // 加入购物车可以加入多次
+              this.hasAddShoppingCar = true
+              let toast = Toast({
+                message: '加入购物车成功',
+                className: 'toast-content',
+                iconClass: 'iconfont icon-caozuochenggong toast-icon-big',
+                duration: 1000
+              })
+              setTimeout(() => {
+                clearTimeout(toast)
+                this.hasAddShoppingCar = false // 1000ms后重置加入购物车状态，使动画可以重复播放
+              }, 1000)
+            } else {
+              Toast({
+                message: res.data.detail || '加入购物车失败',
+                duration: 1000
+              })
+            }
+          },
+          reject: () => {
+          }
+        })
+      },
+      buyNow (quantity) {
+        this.buyQuantity = quantity
+        this.token = getStore('user') ? getStore('user').authentication_token : ''
+        this.mobile = getStore('user') ? getStore('user').mobile : ''
+        if (this.checkBeforeBuying()) {
+          if (this.hasLogin && this.mobile) {
+            this.closeSku()
+            this.quantity = 1
+            setStore('buying', [{
+              team: {
+                company: this.productDetailTeam.company,
+                id: this.productDetailTeam.id,
+                logo: this.productDetailTeam.logo
+              },
+              message: '',
+              products: [{
+                id: null, // 进入确认订单页面后，此id为空，更改购买数量时，不需要发请求更改
+                quantity: quantity,
+                price: {
+                  id: this.currentPrice.id,
+                  warehouse: null,
+                  amount: this.currentPrice.amount,
+                  money: this.handleDiscountPrice(this.currentPrice.money, this.productDetail.promotion),
+                  product: {
+                    id: this.productDetail.id,
+                    name: this.productDetail.name,
+                    state: this.productDetail.state,
+                    organization_id: this.productDetail.organization_id,
+                    file_id: this.productDetailFiles[0].id,
+                    file_url: this.productDetailFiles[0].url,
+                    file_thumb_url: this.productDetailFiles[0].thumb_urls[0]
+                  }
+                },
+                checked: true
+              }]
+            }])
+            this.getDeliveries(this.token, true)
+          } else if (this.hasLogin && !this.mobile) {
+            this.closeSku()
+            this.$store.dispatch('switchBindMobile', {status: true})
+          } else {
+            this.goLogin()
+          }
+        }
+      },
+      closeBindMobile () {
+        this.$store.dispatch('switchBindMobile', {status: false})
+      },
+      bindMobileNext () {
+        this.$store.dispatch('switchBindMobile', {status: false})
+        this.buyNow(this.buyQuantity)
+      },
+      openFavorites () {
+        if (this.hasLogin) {
+          this.$router.push({name: 'Favorites'})
+        } else {
+          this.goLogin()
+        }
+      },
+      searchProduct () {
+        this.$router.push({name: 'SearchProducts'})
+      },
+      goConversation () {
+        if (this.hasLogin) {
+          this.$router.push({name: 'Conversation'})
+        } else {
+          this.goLogin()
+        }
+      },
+      goReprot () {
+        this.$router.push({name: 'Report', query: {resourceId: this.currentTeamId, resourceClass: 'product'}})
+      },
+      stopTouchMove () {
+        let self = this
+        document.getElementById('app').addEventListener('touchmove', (e) => { // 监听滚动事件
+          if (self.showPreview || self.popUp) {
+            e.preventDefault()
+          }
+        })
+      },
+      allowTouchMove () {
+        let self = this
+        document.getElementById('app').removeEventListener('touchmove', (e) => { // 监听滚动事件
+          if (self.showPreview || self.popUp) {
+            e.preventDefault()
+          }
+        })
+      },
+      goLinkEnterpriseDetail (item) {
+        if (item.state === 'approved') {
+          this.closePopup()
+          this.$router.push({name: 'EnterpriseCarte', params: {id: item.id}})
+        }
+      },
+      goLinkProductDetail (item) {
+        if (item.state === 'approved') {
+          this.closePopup()
+          // this.$router.push({name: 'ProductDetail', params: {id: item.id}})
+          this.$router.push({path: `/products/${item.id}`})
+          // window.location.reload()
+        }
+      },
+      goEnterprise (bool) {
+        let rootFontSize = document.documentElement.style.fontSize.split('p')[0]
+        let height = Math.round((220 / 75) * parseFloat(rootFontSize + ''))
+        this.$router.push({name: 'EnterpriseCarte', params: {id: this.currentTeamId}, query: {height: bool ? height + 1 : 0}})
+      },
+      handleIntegralModal () {
+        if (getStore('shareIntegral')) {
+          this.$store.dispatch('switchRegistDialog', {status: getStore('shareIntegral')})
+          removeStore('shareIntegral')
+          removeStore('shareRegist')
+        }
+      },
+      handleScrollHeight () {
+        let appHeight = document.getElementById('app').offsetHeight
+        let rootFontSize = document.documentElement.style.fontSize.split('p')[0]
+        let divHeight = (appHeight / parseFloat(rootFontSize + '')).toFixed(2)
+        this.scrollHeight = `${Math.round(divHeight * 100) / 100}rem`
+      },
+      handleSharerInfo () {
+        if (getStore('shortUuid') && !this.$store.getters.hasCloseRegistBar && !(getStore('user') && getStore('user').mobile)) {
+          this.getSharerInfo()
+        }
+      },
+      getSharerInfo () {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/people/inviter_info',
+          method: 'get',
+          params: {
+            sharer_uuid: getStore('shortUuid')
+          },
+          target: this,
+          resolve: (state, res) => {
+            state.sharerInfo = {
+              name: res.data.home_name,
+              logo: res.data.img
+            }
+            this.$store.dispatch('switchRegistBar', {status: !state.hasCloseRegistBar && !(getStore('user') && getStore('user').mobile && !!getStore('shortUuid'))})
+          },
+          reject: () => {
+          }
+        })
+      },
+      handleDiscountPrice (money, promotion) {
+        return promotion ? (Math.round(parseFloat(money) * parseFloat(promotion.rate) * 100) / 100).toFixed(2) : money
+      },
+      canCountDown (price, productObj, now) {
+        this.shouldCountDown = price !== '定制' && price !== '赠品' && productObj && productObj.prices && productObj.prices.length > 0 && productObj.promotion && productObj.promotion.rate
+        if (this.shouldCountDown) {
+          this.handleCountDown(productObj.promotion.expired_at, 1000, now)
+        }
+      },
+      handleCountDown (expireTime, step = 100, now) {
+        let expireTimeObj = {
+          year: `20${expireTime.substr(0, 2)}`,
+          month: expireTime.substr(3, 2),
+          day: expireTime.substr(6, 2),
+          hour: expireTime.substr(9, 2),
+          min: expireTime.substr(12, 2),
+          sec: expireTime.substr(15, 2),
+          wsec: '00'
+        }
+        let time = moment(`${expireTimeObj.year}-${expireTimeObj.month}-${expireTimeObj.day} ${expireTimeObj.hour}:${expireTimeObj.min}:${expireTimeObj.sec}`)
+        let leftWsec = time.diff(now)
+        const count = () => {
+          let day = Math.floor(leftWsec / 1000 / 3600 / 24)
+          let hour = Math.floor((leftWsec - day * 3600 * 1000 * 24) / 1000 / 3600)
+          let min = Math.floor((leftWsec - day * 3600 * 1000 * 24 - hour * 3600 * 1000) / 1000 / 60)
+          let sec = Math.floor((leftWsec - day * 3600 * 1000 * 24 - hour * 3600 * 1000 - min * 60 * 1000) / 1000)
+          let wsec = Math.floor((leftWsec - day * 3600 * 1000 * 24 - hour * 3600 * 1000 - min * 60 * 1000 - sec * 1000) / 100)
+          this.countdownTime = {
+            day: day < 10 ? `0${day}` : day,
+            hour: hour < 10 ? `0${hour}` : hour,
+            min: min < 10 ? `0${min}` : min,
+            sec: sec < 10 ? `0${sec}` : sec,
+            wsec: wsec < 10 ? `0${wsec}` : wsec
+          }
+          leftWsec -= step
+          if (leftWsec <= 1000 && this.interval) {
+            window.clearInterval(this.interval)
+            window.location.reload()
+          }
+        }
+        count()
+        this.interval = window.setInterval(count, step)
+      },
+      getComments () {
+        this.$store.dispatch('commonAction', {
+          url: `/v1/products/${this.id}/comments`,
+          method: 'get',
+          params: {
+            page: 1,
+            per_page: 2
+          },
+          target: this,
+          resolve: (state, res) => {
+            this.baseComments = res.data.comments
+            this.commentsLength = res.data.meta.total
+            let ids = this.handleFileIds(res.data.comments)
+            this.getCommentImgs(ids)
+          },
+          reject: () => {
+          }
+        })
+      },
+      handleFileIds (arr) {
+        let tmpArr = []
+        for (let i = 0; i < arr.length; i++) {
+          for (let j = 0; j < arr[i].file_ids.length; j++) {
+            tmpArr.push(arr[i].file_ids[j])
+          }
+        }
+        return tmpArr
+      },
+      getCommentImgs (ids) {
+        this.$store.dispatch('commonAction', {
+          url: '/v1/links/users/order_files',
+          method: 'get',
+          params: {
+            thumbs: ['general'],
+            ids: ids
+          },
+          target: this,
+          resolve: (state, res) => {
+            this.comments = this.handleComments(this.baseComments, res.data.files)
+          },
+          reject: () => {
+          }
+        })
+      },
+      handleComments (comments, imgs) {
+        for (let i = 0; i < comments.length; i++) {
+          comments[i] = {...comments[i], imgs: []}
+          for (let j = 0; j < comments[i].file_ids.length; j++) {
+            for (let m = 0; m < imgs.length; m++) {
+              if (comments[i].file_ids[j] === imgs[m].id) {
+                comments[i].imgs.push(imgs[m])
+              }
+            }
+          }
+        }
+        return comments
+      },
+      viewMoreComments () {
+        this.$router.push({name: 'Comments', params: {id: this.id}})
+      }
+    },
+    mounted () {
+      this.handleScrollHeight()
+      this.handleSharerInfo()
+      this.handleIntegralModal()
+      this.stopTouchMove()
+      this.getProductDetail(this.id)
+      this.getComments()
+    },
+    computed: {
+      ...mapGetters([
+        'unReadeMsgs',
+        'bindMobileModal'
+      ])
+    }
+  }
+</script>
+
+<style lang="scss" scoped>
+  @import '../../styles/mixin';
+
+  .container {
+    position: relative;
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 1px;
+    box-sizing: border-box;
+  }
+  .swipe {
+    @include px2rem(height, 634px);
+    @include pm2rem(margin, 0px, 0px, 0px, 0px);
+    position: relative;
+    overflow: hidden;
+    .activity-tag {
+      position: absolute;
+      @include px2rem(left, 18px);
+      @include px2rem(bottom, 18px);
+      @include px2rem(width, 122px);
+      @include px2rem(height, 79px);
+    }
+    .swiper-container {
+      height: 100%;
+      width: 100%;
+    }
+    .swiper-slide {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .swipe-img {
+      height: inherit;
+      width: inherit;
+      z-index: 1;
+      background-position: center center!important;
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+    .swipe-img[lazy=loading] {
+      z-index: 1;
+      background-position: center center!important;
+      background: url("../../assets/imgLoading3.jpg");
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+    .swipe-img[lazy=error] {
+      z-index: 1;
+      background-position: center center!important;
+      background: url("../../assets/imgLoadingError.png");
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+    .swipe-img[lazy=loaded] {
+      height: inherit;
+      width: inherit;
+      z-index: 1;
+      background-position: center center!important;
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+    img {
+      max-width: 100%;
+      max-height: 100%;
+      width: inherit;
+      z-index: 1;
+    }
+  }
+  .header {
+    @include px2rem(margin-top, 4px);
+  }
+  .page-nav {
+    position: absolute;
+    @include px2rem(bottom, 16px);
+    @include px2rem(right, 16px);
+    @include pm2rem(padding, 4px, 20px, 4px, 20px);
+    background-color: rgba(57, 55, 66, 0.5);
+    z-index: 1;
+  }
+  .info-container {
+    @include pm2rem(padding, 42px, 0px, 0px, 26px);
+    border-bottom: 1px solid $third-grey;
+    @include px2rem(margin-bottom, 22px);
+    .name {
+      @include pm2rem(margin, 0px, 0px, 30px, 0px);
+      .text {
+        @include px2rem(font-size, 34px);
+        font-weight: 800;
+        line-height: 1.5;
+      }
+      .tag-wrapper {
+        @include px2rem(height, 44px);
+        @include px2rem(line-height, 44px);
+        display: inline-flex;
+        align-items: flex-start;
+        justify-content: center;
+        vertical-align: middle;
+      }
+      .promotion-tag {
+        color: $white;
+        display: flex;
+        padding-top: 1px;
+        @include px2rem(height, 30px);
+        @include px2rem(font-size, 20px);
+        @include px2rem(width, 66px);
+        @include px2rem(min-width, 66px);
+        justify-content: center;
+        align-items: center;
+      }
+      .tag-green {
+        background-color: $green;
+      }
+      .tag-red {
+        background-color: #ff6000;
+      }
+      .tag-orange {
+        background-color: #ffa500;
+      }
+    }
+    .money {
+      position: relative;
+      @include pm2rem(padding, 0px, 70px, 0px, 0px);
+      @include px2rem(height, 80px);
+      display: flex;
+      .num {
+        color: #FF0000;
+        display: inline-block;
+        @include px2rem(margin-right, 20px);
+        @include px2rem(max-width, 300px);
+        @include px2rem(line-height, 80px);
+        .price-icon {
+          @include px2rem(font-size, 28px);
+        }
+        .price-num {
+          @include px2rem(font-size, 52px);
+        }
+      }
+      .discount {
+        color: #999;
+        display: inline-block;
+        height: 100%;
+        @include px2rem(line-height, 90px);
+        @include px2rem(max-width, 200px);
+        .price-icon {
+          @include px2rem(font-size, 24px);
+        }
+        .price-num {
+          @include px2rem(font-size, 28px);
+        }
+      }
+      .countdown {
+        position: absolute;
+        right: 0;
+        top: 0;
+        height: 100%;
+        @include px2rem(width, 260px);
+        text-align: center;
+        .countdown-text {
+          @include px2rem(font-size, 24px);
+          line-height: normal;
+          color: $third-dark;
+        }
+        .clockrun {
+          .day {
+            @include px2rem(font-size, 24px);
+            color: $third-dark;
+          }
+          .number {
+            color: $white;
+            line-height: normal;
+            @include px2rem(min-width, 32px);
+            @include px2rem(font-size, 24px);
+            background-color: #ff6000;
+            @include px2rem(border-radius, 4px);
+            display: inline-block;
+          }
+        }
+      }
+    }
+    .tag-wrapper {
+      justify-content: flex-start;
+    }
+    .inventory {
+      @include pm2rem(padding, 0px, 0px, 22px, 0px);
+      flex: 2;
+    }
+  }
+  .price-container {
+    @include px2rem(margin-bottom, 22px);
+    border-top: 1px solid $third-grey;
+    border-bottom: 1px solid $third-grey;
+    a {
+      @include px2rem(height, 96px);
+      @include pm2rem(padding, 0px, 26px, 0px, 26px);
+      align-items: center;
+      line-height: normal;
+    }
+    a:active {
+      background-color: rgba(239, 234, 234, .5);
+    }
+  }
+  .nav-bars {
+    @include px2rem(height, 96px);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    background-color: $white;
+    border-bottom: 1px solid $third-grey;
+    .tab-wrapper {
+      flex: 1;
+      height: inherit;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      .tab {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: inherit;
+        position: relative;
+        @include px2rem(font-size, 30px);
+        color: $second-dark;
+        cursor: pointer;
+        width: auto;
+        text-align: center;
+        .selected {
+          position: absolute;
+          bottom: 0;
+          width: 100%;
+          left: 0;
+          right: 0;
+          @include px2rem(height, 8px);
+          background-color: $green;
+        }
+      }
+      .tab-active {
+        color: $green;
+        transition: all .2s;
+      }
+    }
+  }
+  .nav-bar-container {
+    border-bottom: 1px solid $third-grey;
+    .more-comments {
+      @include pm2rem(padding, 10px, 0px, 40px, 0px);
+      .btn {
+        @include px2rem(width, 203px);
+        @include px2rem(height, 63px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: $green;
+        border: 1px solid $green;
+        @include px2rem(font-size, 25px);
+        @include px2rem(border-radius, 40px);
+        margin: 0 auto;
+      }
+      & a:active {
+        color: #41e2b4;
+        border-color: #41e2b4;
+      }
+    }
+  }
+  .company-info {
+    @include px2rem(height, 290px);
+    box-sizing: border-box;
+    @include pm2rem(margin, 22px, 0px, 97px, 0px);
+    @include pm2rem(padding, 22px, 32px, 22px, 32px);
+    border-top: 1px solid $third-grey;
+    line-height: normal;
+    flex-direction: column;
+    .wraper {
+      display: flex;
+      align-items: center;
+      @include px2rem(height, 120px);
+      .company-img {
+        @include px2rem(width, 120px);
+        height: inherit;
+        @include px2rem(margin-right, 36px);
+        img {
+          width: 100%;
+          height: 100%;
+        }
+        div {
+          @include px2rem(width, 120px);
+          height: inherit;
+          background-color: $third-grey;
+        }
+      }
+      .content-wraper {
+        width: inherit;
+        flex: 1;
+        height: inherit;
+        @include px2rem(padding-top, 12px);
+        box-sizing: border-box;
+        .company-content {
+          flex-direction: column;
+          line-height: normal;
+          flex: 1;
+          width: inherit;
+          height: 100%;
+          .title {
+            font-weight: bold;
+            color: $primary-dark;
+            width: 100%;
+          }
+          .empty-title {
+            @include px2rem(height, 36px);
+            @include px2rem(width, 300px);
+            background-color: $ninth-grey;
+          }
+          .info {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            .icon-box {
+              svg {
+                @include px2rem(font-size, 44px);
+              }
+              .empty-svg {
+                @include px2rem(height, 44px);
+                @include px2rem(width, 44px);
+                @include px2rem(border-radius, 22px);
+                background-color: $ninth-grey;
+              }
+              @include px2rem(margin-right, 36px);
+            }
+            .service-tag {
+              color: $green;
+              @include px2rem(height, 40px);
+              @include pm2rem(padding, 0px, 20px, 0px, 20px);
+              @include px2rem(font-size, 26px);
+              border: 1px solid $green;
+              @include px2rem(border-radius, 30px);
+              line-height: normal;
+            }
+            .empty-tag {
+              background-color: $ninth-grey;
+              @include px2rem(width, 80px);
+              border: none;
+            }
+          }
+        }
+      }
+    }
+    .buttons {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      a {
+        @include px2rem(width, 270px);
+        @include px2rem(height, 70px);
+        line-height: normal;
+        @include px2rem(border-radius, 10px);
+        border: 1px solid $third-grey;
+        color: $second-dark;
+        .icon-box {
+          height: inherit;
+          @include px2rem(width, 40px);
+          @include px2rem(margin-right, 20px);
+          i {
+            height: inherit;
+            @include px2rem(font-size, 34px);
+            line-height: normal;
+          }
+        }
+        span {
+          @include px2rem(font-size, 28px);
+          line-height: normal;
+        }
+      }
+      a:active {
+        background-color: rgba(239, 234, 234, .5);
+      }
+    }
+  }
+  .product-tab-bar {
+    @include px2rem(height, 97px);
+    display: -webkit-box;
+    position: fixed;
+    bottom: 0;
+    .btn-box {
+      border-top: 1px solid $fifth-grey;
+      width: 17.6%;
+      box-sizing: border-box;
+      line-height: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      i {
+        @include px2rem(margin-bottom, 12px);
+      }
+      .bottom-btn-active {
+        color: #FF3E3E;
+        animation: bounceIn 1s ease-in 0s 1 normal both;
+      }
+      .kefu {
+        color: #20A2E5;
+      }
+      .badge {
+        background-color: $white;
+        position: absolute;
+        @include px2rem(top, 10px);
+        @include px2rem(right, 26px);
+        @include px2rem(min-width, 20px);
+        @include px2rem(min-height, 20px);
+        @include pm2rem(padding, 2px, 2px, 2px, 2px);
+        color: $red;
+        @include px2rem(border-radius, 30px);
+        @include px2rem(font-size, 16px);
+        border: 1px solid $red;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        @include line-height(8px);
+      }
+      .active {
+        animation: bounceIn 1s ease-in 0s 1 normal both;
+      }
+    }
+    .btn-shopping-car {
+      width: 23.6%;
+      background-color: $green;
+      border: none;
+      line-height: normal;
+      span {
+        font-weight: bold;
+      }
+    }
+    .btn-buy {
+      width: 23.6%;
+      background-color: #1db689;
+      border: none;
+      line-height: normal;
+      span {
+        font-weight: bold;
+      }
+    }
+    .disabled {
+      background-color: $eighth-grey;
+    }
+  }
+  .productdetail-product-tags {
+    display: flex;
+    flex-wrap: wrap;
+    @include pm2rem(padding, 20px, 0px, 0px, 20px);
+    .tag {
+      @include px2rem(border-radius, 7px);
+      border: 1px solid $second-grey;
+      @include pm2rem(padding, 10px, 20px, 10px, 20px);
+      @include pm2rem(margin, 0px, 20px, 20px, 0px);
+      line-height: 1;
+    }
+    .no-info {
+      @include px2rem(height, 330px);
+      @include pm2rem(padding, 50px, 0px, 68px, 0px);
+      box-sizing: border-box;
+      text-align: center;
+      width: 100%;
+      line-height: normal;
+      img {
+        @include px2rem(width, 202px);
+        @include px2rem(height, 136px);
+        @include px2rem(margin-bottom, 50px);
+      }
+      p {
+        @include px2rem(font-size, 30px);
+        margin: 0 auto;
+        color: $fifth-grey;
+      }
+    }
+    .empty-margin {
+      @include pm2rem(margin, -20px, 20px, 0px, 0px);
+    }
+  }
+  .productdetail-comments {
+    .no-info {
+      @include px2rem(height, 330px);
+      @include pm2rem(padding, 50px, 0px, 68px, 0px);
+      box-sizing: border-box;
+      text-align: center;
+      width: 100%;
+      line-height: normal;
+      img {
+        @include px2rem(width, 202px);
+        @include px2rem(height, 136px);
+        @include px2rem(margin-bottom, 50px);
+      }
+      p {
+        @include px2rem(font-size, 30px);
+        margin: 0 auto;
+        color: $fifth-grey;
+      }
+    }
+  }
+  .option-bar {
+    position: fixed;
+    @include px2rem(top, 38px);
+    display: flex;
+    align-items: center;
+    z-index: 1004;
+    .close {
+      @include pm2rem(padding, 4px, 10px, 4px, 10px);
+      @include px2rem(border-radius, 10px);
+      @include pm2rem(margin, 0px, 30px, 0px, 30px);
+      background-color: rgba(0, 0, 0, .5);
+      color: white;
+      z-index: 1003;
+      display: flex;
+      align-items: center;
+      i {
+        @include font-dpr(20px);
+      }
+    }
+    .preview-page-nav {
+      background-color: rgba(0, 0, 0, .5);
+      @include px2rem(border-radius, 10px);
+      z-index: 1003;
+      @include pm2rem(padding, 4px, 10px, 4px, 10px);
+    }
+  }
+  .full-screen-swiper {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1003 !important;
+    background-color: $dark;
+    img[lazy=loading] {
+      max-width: 100%;
+      max-height: 100%;
+      width: inherit;
+      z-index: 1;
+      background-position: center center!important;
+      background: url("../../assets/imgLoading3.jpg");
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+    img[lazy=error] {
+      max-width: 100%;
+      max-height: 100%;
+      width: inherit;
+      z-index: 1;
+      background-position: center center!important;
+      background: url("../../assets/imgLoadingError.png");
+      background-repeat: no-repeat;
+      background-size: cover;
+    }
+    img[lazy=loaded] {
+      max-width: 100%;
+      max-height: 100%;
+      width: inherit;
+      z-index: 1;
+    }
+  }
+  .full-screen-bg {
+    background-color: $dark;
+  }
+  .product-popup-dialog {
+    position: fixed;
+    width: 100%;
+    max-width: 540px;
+    height: 100%;
+    background-color: rgba(0, 0, 0, .5);
+    z-index: 1001;
+    top: 0;
+    .main {
+      @include px2rem(width, 562px);
+      @include px2rem(top, 200px);
+    }
+    .title {
+      @include px2rem(height, 80px);
+      text-align: center;
+      @include px2rem(line-height, 80px);
+    }
+    .content {
+      @include px2rem(min-height, 500px);
+      border-bottom: 1px solid $third-grey;
+      .item {
+        border-bottom: 1px solid $third-grey;
+        @include px2rem(height, 108px);
+        display: flex;
+        align-items: center;
+        box-sizing: border-box;
+        @include pm2rem(padding, 20px, 12px, 20px, 12px);
+        img {
+          @include px2rem(width, 70px);
+          @include px2rem(height, 70px);
+          @include px2rem(margin-right, 22px);
+        }
+        .info {
+          div {
+            line-height: 1;
+          }
+          p {
+            line-height: 1;
+            @include px2rem(max-width, 400px);
+            @include px2rem(margin-bottom, 20px);
+          }
+          span {
+            @include px2rem(margin-right, 50px);
+          }
+          .product-price {
+            color: #F50E0E;
+          }
+          .width-limit {
+            display: inline-flex;
+            @include px2rem(max-width, 200px);
+          }
+        }
+      }
+    }
+    .footer {
+      @include px2rem(height, 80px);
+      @include px2rem(line-height, 80px);
+      text-align: center;
+    }
+  }
+
+</style>
+
+<style lang="scss">
+  @import '../../styles/mixin';
+  /*覆盖mint-ui中nav-bar组件默认样式，故不用scoped*/
+
+  .swipe {
+    .swiper-pagination {
+      z-index: 1;
+    }
+    .swiper-pagination-bullet-active {
+      background-color: $white;
+    }
+  }
+  .productdetail-product-item {
+    @include px2rem(padding-right, 30px);
+    background-color: $white;
+    line-height: 1;
+    .row-item {
+      @include pm2rem(padding, 0px, 32px, 0px, 32px);
+      line-height: 1;
+      .content {
+        @include font-dpr(13px);
+        @include line-height(31px);
+        @include pm2rem(padding, 15px, 54px, 8px, 24px);
+        border-bottom: 1px solid $fourth-grey;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        -webkit-box-orient: vertical;
+        display: -webkit-box;
+        @include px2rem(height, 132px);
+        i {
+          color: #F4B223;
+          position: absolute;
+          @include px2rem(right, 140px);
+          @include font-dpr(21px);
+        }
+      }
+      .line2 {
+        -webkit-line-clamp: 2;
+      }
+      .link {
+        @include px2rem(height, 66px);
+      }
+      .last {
+        border-bottom: none;
+      }
+    }
+    .title-container {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      .dot {
+        @include pm2rem(margin, 0px, -9px, 0px, -20px);
+        @include font-dpr(30px);
+        @include line-height(30px);
+        color: #ACACAC;
+      }
+      .title {
+        flex: 1;
+        @include font-dpr(15px);
+        @include line-height(30px);
+        @include px2rem(margin-right, 50px);
+        word-wrap: break-word;
+        word-break: break-all;
+        color: $second-dark;
+      }
+      i {
+        color: #F4B223;
+        @include px2rem(margin-right, 10px);
+        @include font-dpr(21px);
+        @include line-height(30px);
+      }
+    }
+    .row-container {
+      position: relative;
+      display: block;
+      .sub-row-title {
+        display: flex;
+        align-items: flex-start;
+        .dot {
+          @include pm2rem(margin, 0px, -9px, 0px, -20px);
+          @include font-dpr(30px);
+          @include line-height(30px);
+          color: #ACACAC;
+        }
+        .title {
+          flex: 1;
+          @include font-dpr(15px);
+          @include line-height(30px);
+          @include px2rem(margin-right, 50px);
+          word-wrap: break-word;
+          word-break: break-all;
+          color: $second-dark;
+        }
+        i {
+          color: #F4B223;
+          @include px2rem(margin-right, 10px);
+          @include font-dpr(21px);
+          @include line-height(30px);
+        }
+      }
+      .sub-item {
+        display: block;
+        .title {
+          flex: 1;
+          @include font-dpr(13px);
+          @include line-height(26px);
+          @include pm2rem(margin, 0px, 50px, 0px, 60px);
+          word-wrap: break-word;
+          word-break: break-all;
+          color: $second-dark;
+        }
+      }
+      .third-item {
+        display: block;
+        .title {
+          flex: 1;
+          @include font-dpr(13px);
+          @include line-height(26px);
+          @include pm2rem(margin, 0px, 50px, 0px, 100px);
+          word-wrap: break-word;
+          word-break: break-all;
+          color: $second-dark;
+        }
+      }
+    }
+    .no-product-args {
+      @include px2rem(height, 330px);
+      @include pm2rem(padding, 50px, 0px, 68px, 0px);
+      box-sizing: border-box;
+      text-align: center;
+      width: 100%;
+      line-height: normal;
+      img {
+        @include px2rem(width, 202px);
+        @include px2rem(height, 136px);
+        @include px2rem(margin-bottom, 50px);
+      }
+      p {
+        @include px2rem(font-size, 30px);
+        margin: 0 auto;
+        color: $fifth-grey;
+      }
+    }
+  }
+  .toast-icon-big {
+    @include font-dpr(36px);
+    @include pm2rem(margin, 0px, 0px, -20px, 0px);
+  }
+</style>
